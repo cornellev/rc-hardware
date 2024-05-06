@@ -53,7 +53,8 @@ long last_update_time;
 long last_push_time;
 long last_error_time;
 
-float autobrake = MAX_VELOCITY;
+float autobrake_max = MAX_VELOCITY;
+float autobrake_min = MAX_VELOCITY;
 
 // SID controller values
 float kP = .002; // Proportional gain for SID controller
@@ -130,9 +131,9 @@ void writeAckermann(float angle, float speed) {
 void updateAckermann() {
   float target_vel = target_velocity;
 
-  target_vel = min(target_velocity, autobrake);
+  target_vel = max(min(target_velocity, autobrake_max), autobrake_min);
 
-  if (autobrake < current_velocity) {
+  if (autobrake_max < current_velocity || autobrake_min > current_velocity) {
     given_power = 0;
     kP = 4.5;
   } else {
@@ -178,8 +179,12 @@ void ackermannDriveCallback(const ackermann_msgs::AckermannDrive& msg) {
   target_velocity = msg.speed;
 }
 
-void autobrakeCallback(const std_msgs::Float32& msg) {
-  autobrake = msg.data;
+void autobrakeMaxCallback(const std_msgs::Float32& msg) {
+  autobrake_max = msg.data;
+}
+
+void autobrakeMinCallback(const std_msgs::Float32& msg) {
+  autobrake_min = msg.data;
 }
 
 void updateVelocity() {
@@ -207,15 +212,17 @@ void updateVelocity() {
 ros::NodeHandle nh;
 rc_localization_odometry::SensorCollect msg;
 ros::Publisher sensor_collect_pub("sensor_collect", &msg); // Publishes all sensor data
-ros::Subscriber<ackermann_msgs::AckermannDrive> sub("rc_movement_msg", &ackermannDriveCallback); // Listens to ackermann drive messages and drives the vehicle
-ros::Subscriber<std_msgs::Float32> autoSub("auto_max_vel", &autobrakeCallback); // Listens to autobrake message
+ros::Subscriber<ackermann_msgs::AckermannDrive> movementSub("rc_movement_msg", &ackermannDriveCallback); // Listens to ackermann drive messages and drives the vehicle
+ros::Subscriber<std_msgs::Float32> autoMax("auto_max_vel", &autobrakeCallback); // Listens to autobrake message
+ros::Subscriber<std_msgs::Float32> autoMin("auto_min_vel", &autobrakeCallback); // Listens to autobrake message
 
 void setup()
 {
   // Start node
   nh.initNode();
-  nh.subscribe(sub);
-  nh.subscribe(autoSub);
+  nh.subscribe(movementSub);
+  nh.subscribe(autoMax);
+  nh.subscribe(autoMin);
   nh.advertise(sensor_collect_pub);
 
   // Helps when using custom topics over rosserial
